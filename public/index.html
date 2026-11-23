@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ABC Company | LaunchDarkly Progressive Delivery & AI Governance</title>
+  <script src="https://unpkg.com/launchdarkly-js-client-sdk@3"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./css/style.css" />
+  <style>
+    .copilot-section-wrap {
+      max-width: 1200px;
+      margin: 0 auto 32px;
+      padding: 0 20px;
+    }
+    .copilot-card {
+      border: 1px solid #d8dee9;
+      border-radius: 12px;
+      padding: 18px;
+      background: #ffffff;
+      color: #0f172a;
+      box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
+    }
+    .copilot-meta-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 12px;
+      font-size: 12px;
+    }
+    .meta-pill {
+      background: #f1f5f9;
+      color: #0f172a;
+      border: 1px solid #cbd5e1;
+      border-radius: 999px;
+      padding: 3px 10px;
+      font-weight: 500;
+    }
+    .preset-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .preset-btn {
+      background: #eef2ff;
+      color: #1e3a8a;
+      border: 1px solid #c7d2fe;
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .preset-btn:hover {
+      background: #e0e7ff;
+    }
+    .copilot-chat-thread {
+      max-height: 220px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 10px;
+      padding: 10px;
+      background: #f8fafc;
+      color: #0f172a;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+    }
+    .copilot-input-row {
+      display: flex;
+      gap: 8px;
+    }
+    .copilot-input-row input {
+      flex: 1;
+      padding: 9px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+      color: #0f172a;
+      background: #ffffff;
+    }
+    .copilot-input-row button,
+    .diff-actions button {
+      padding: 9px 14px;
+      border-radius: 8px;
+      border: 1px solid #cbd5e1;
+      background: #0f172a;
+      color: #ffffff;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .diff-actions button.secondary-btn {
+      background: #ffffff;
+      color: #0f172a;
+    }
+    .diff-box {
+      margin-top: 14px;
+      border: 1px solid #e2e8f0;
+      background: #f8fafc;
+      color: #0f172a;
+      border-radius: 8px;
+      padding: 14px;
+    }
+    #copilot-summary {
+      color: #0f172a;
+      font-weight: 500;
+    }
+    .diff-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+      margin: 10px 0;
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+    }
+    .diff-before {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      padding: 10px;
+      border-radius: 6px;
+    }
+    .diff-after {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      color: #166534;
+      padding: 10px;
+      border-radius: 6px;
+    }
+    .diff-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <header class="se-control-bar">
+    <div class="brand-cluster">
+      <div class="brand-logo">
+        <span class="brand-dot" title="LaunchDarkly Streaming SDK Active"></span>
+        <span>ABC Company Cloud</span>
+      </div>
+      <div class="control-group">
+        <span class="control-label">Persona:</span>
+        <select id="persona-select" onchange="switchPersona()">
+          <option value="standard">Visitor: Rohan (Standard Tier - Default)</option>
+          <option value="qa">Internal QA: Sarah (Key: qa-sarah)</option>
+          <option value="premium">VIP Customer: John (user_tier: Premium)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <span class="control-label">Flag <code>revamped-landing-hero</code>:</span>
+      <span id="flag-status-badge" class="badge badge-off">Loading...</span>
+      <span class="reset-pill" title="Press Shift + R anywhere to reset demo state">
+        Reset: <code>Shift + R</code>
+      </span>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Left Column: Live Customer Experience -->
+    <section id="hero-container" class="hero-card">
+      <div class="hero-header">
+        <span id="version-tag" class="version-tag">LEGACY EXPERIENCE (v1.0)</span>
+        <span id="sla-badge" class="sla-badge hidden">AI Auto-Scaling Active • 99.99% SLA</span>
+      </div>
+
+      <h1 id="hero-title">Welcome to ABC Company Enterprise Cloud</h1>
+      <p id="hero-subtitle">
+        Reliable infrastructure for growing teams. Standard deployment pipeline active.
+      </p>
+
+      <div id="v2-feature-box" class="v2-feature-box hidden">
+        <div class="metrics-row">
+          <div class="metric-pill">
+            <strong>Throughput</strong>
+            <span>14.2k req/s</span>
+          </div>
+          <div class="metric-pill">
+            <strong>P99 Latency</strong>
+            <span>18ms (Optimal)</span>
+          </div>
+          <div class="metric-pill">
+            <strong>Observability</strong>
+            <span>Coralogix OTel Live</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="button-row">
+        <button class="cta-btn" onclick="trackConversion()">Get Started Today</button>
+        <span id="conversion-counter-badge">Events Tracked: 0</span>
+        <button id="beta-bug-btn" class="beta-btn hidden" onclick="simulateIncident()">
+          Run AI Cost Optimizer (Beta)
+        </button>
+      </div>
+
+      <div id="alert-banner" class="alert-banner hidden"></div>
+      <div id="toast"></div>
+    </section>
+
+    <!-- Right Column: Real-Time Context & Telemetry Inspector -->
+    <aside class="inspector">
+      <div class="inspector-header">
+        <span class="inspector-title">Active LaunchDarkly Context</span>
+        <span class="sdk-pill">JS Client SDK v3</span>
+      </div>
+
+      <pre id="context-display"></pre>
+
+      <div id="ai-config-status-box" class="ai-config-status-box">
+        <div class="ai-config-status-header">
+          <span>AI Config: <code>release-copilot-config</code></span>
+          <span id="ai-config-model-pill" class="sdk-pill">Server SDK</span>
+        </div>
+        <div id="ai-config-status-detail" class="ai-config-status-detail">
+          Evaluates model &amp; system prompt per context on Copilot preview.
+        </div>
+      </div>
+
+      <div class="architecture-notes">
+        <div class="note-item">
+          <span class="note-icon"></span>
+          <div><strong>Zero-Reload Streaming:</strong> Flag evaluations execute locally in <code>&lt;0.1ms</code> and react instantly to LaunchDarkly rule updates.</div>
+        </div>
+        <div class="note-item">
+          <span class="note-icon"></span>
+          <div><strong>Coralogix OTel Correlation:</strong> Every evaluation injects <code>ld.context.*</code> and <code>ld.flag.*</code> attributes into backend traces.</div>
+        </div>
+        <div class="note-item">
+          <span class="note-icon"></span>
+          <div><strong>Human-in-the-Loop AI:</strong> Use the <strong>AI Release Copilot</strong> below to preview flag mutations via a before/after diff guardrail.</div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- AI Release Copilot & Diff Guardrail -->
+  <div class="copilot-section-wrap">
+    <section id="ai-copilot-section" class="copilot-card" aria-label="AI Release Copilot">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <strong>AI Release Copilot &amp; Diff Guardrail</strong>
+        <span id="copilot-status-badge" class="meta-pill">Ready</span>
+      </div>
+
+      <!-- AI Config Metadata Strip -->
+      <div id="ai-config-meta" class="copilot-meta-bar">
+        <span class="meta-pill">Config: <code>release-copilot-config</code></span>
+        <span class="meta-pill" id="meta-model">Model: —</span>
+        <span class="meta-pill" id="meta-variation">Variation: —</span>
+        <span class="meta-pill" id="meta-source">Source: —</span>
+      </div>
+
+      <!-- One-Click Preset Prompts -->
+      <div class="preset-row">
+        <button
+          type="button"
+          class="preset-btn"
+          data-preset="P99 latency spiked after enabling revamped-landing-hero—recommend safe kill-switch rollback"
+        >
+          Rollback on P99 Spike
+        </button>
+        <button
+          type="button"
+          class="preset-btn"
+          data-preset="Check if current targeting rules for Sarah and Premium users look healthy"
+        >
+          Audit Rollout Safety
+        </button>
+        <button
+          type="button"
+          class="preset-btn"
+          data-preset="Summarize governance guardrails before wider release"
+        >
+          Pre-Release Check
+        </button>
+      </div>
+
+      <!-- Chat Thread -->
+      <div id="copilot-chat-thread" class="copilot-chat-thread">
+        <div style="font-size:12px; color:#475569;">
+          Ask about rollout safety, latency spikes, or flag targeting—powered by LaunchDarkly AI Configs + Local LLM.
+        </div>
+      </div>
+
+      <!-- Prompt Input -->
+      <div class="copilot-input-row">
+        <input
+          id="copilot-prompt-input"
+          type="text"
+          placeholder="Ask the AI Release Copilot (or click a preset above)..."
+        />
+        <button id="copilot-evaluate-btn" type="button">Send</button>
+      </div>
+
+      <!-- Diff Preview Card (Shown when a flag change needs approval) -->
+      <div id="copilot-diff-card" class="diff-box hidden">
+        <div id="copilot-summary" style="font-size:13px; margin-bottom:6px;"></div>
+        <div style="font-size:12px; color:#475569;" id="copilot-impact"></div>
+
+        <div class="diff-grid">
+          <div class="diff-before">
+            <strong>Current State</strong>
+            <div id="diff-current-text"></div>
+          </div>
+          <div class="diff-after">
+            <strong>Proposed Change</strong>
+            <div id="diff-proposed-text"></div>
+          </div>
+        </div>
+
+        <div class="diff-actions">
+          <button id="copilot-approve-btn" type="button" class="hidden">Approve &amp; Apply Change</button>
+          <button id="copilot-dismiss-btn" type="button" class="secondary-btn">Dismiss</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Demo Controls & AI Diff Preview Guardrail (must load before app.js) -->
+  <script src="./js/demoControls.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>
