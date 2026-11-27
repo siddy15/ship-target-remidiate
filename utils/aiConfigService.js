@@ -8,6 +8,7 @@ const LOCAL_LLM_BASE_URL = (process.env.LOCAL_LLM_BASE_URL || 'http://localhost:
 const LOCAL_LLM_MODEL_OVERRIDE = process.env.LOCAL_LLM_MODEL || 'qwen/qwen3.5-9b';
 const LOCAL_LLM_TIMEOUT_MS = Number(process.env.LOCAL_LLM_TIMEOUT_MS) || 120000;
 
+// Used when LaunchDarkly is unavailable or has no matching AI configuration.
 const DEFAULT_AI_CONFIG = {
   enabled: true,
   model: {
@@ -28,7 +29,9 @@ const DEFAULT_AI_CONFIG = {
 
 let ldServerClient = null;
 let ldAiClient = null;
+// Share initialization across concurrent calls so the SDK is initialized only once.
 let initPromise = null;
+// Coalesce identical concurrent prompts to avoid duplicate local model work.
 const inFlightRequests = new Map();
 
 async function getAIClient() {
@@ -43,6 +46,7 @@ async function getAIClient() {
       ldAiClient = initAi(client);
       return ldAiClient;
     })().catch((err) => {
+      // Allow callers to continue with the local default configuration if LD init fails.
       console.warn('[AI Config] LD Server AI SDK init fallback:', err.message);
       return null;
     });
@@ -63,6 +67,7 @@ function formatLocalLlmError(err) {
   return err.message || String(err);
 }
 
+// Provide a topic-specific response when the local model cannot be reached.
 function buildTopicAwareFallback({ cleanPrompt, safeContext, currentFlagState, incidentActive, wantsRollback }) {
   const flagStateLabel = currentFlagState ? 'ON (true)' : 'OFF (false)';
 
@@ -97,6 +102,7 @@ async function queryLocalLLM({ modelName, systemPrompt, history = [], userPrompt
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), LOCAL_LLM_TIMEOUT_MS);
 
+    // Keep only recent user/assistant turns with usable text; discard system messages from history.
     const sanitizedHistory = Array.isArray(history)
       ? history
         .filter(
@@ -110,6 +116,7 @@ async function queryLocalLLM({ modelName, systemPrompt, history = [], userPrompt
         .map((msg) => ({ role: msg.role, content: msg.content.trim() }))
       : [];
 
+    // The current prompt is appended below, so avoid sending it twice if callers included it in history.
     if (
       sanitizedHistory.length > 0 &&
       sanitizedHistory[sanitizedHistory.length - 1].role === 'user' &&
@@ -125,6 +132,7 @@ async function queryLocalLLM({ modelName, systemPrompt, history = [], userPrompt
     ];
 
     const endpoint = `${LOCAL_LLM_BASE_URL}/chat/completions`;
+    // Keep generation within a useful minimum and a bounded maximum token budget.
     const effectiveMaxTokens = Math.min(Math.max(parameters.max_tokens ?? 1500, 1500), 2048);
 
     try {
@@ -160,6 +168,7 @@ async function queryLocalLLM({ modelName, systemPrompt, history = [], userPrompt
       const choiceMsg = parsedBody && parsedBody.choices && parsedBody.choices[0] ? parsedBody.choices[0].message : null;
       const rawContent = choiceMsg?.content?.trim() || '';
 
+      // Some local models return reasoning separately; others wrap it in <think> tags.
       const closedThinkMatch = rawContent.match(/<think>([\s\S]*?)<\/think>/i);
       const unclosedThinkMatch = !closedThinkMatch ? rawContent.match(/<think>([\s\S]*)$/i) : null;
       const reasoning = (
@@ -169,6 +178,7 @@ async function queryLocalLLM({ modelName, systemPrompt, history = [], userPrompt
         ''
       ).trim();
 
+      // Return only the user-facing completion, not any reasoning text embedded in content.
       const reply = rawContent
         .replace(/<think>[\s\S]*?<\/think>/gi, '')
         .replace(/<think>[\s\S]*$/gi, '')
@@ -206,6 +216,7 @@ async function evaluateReleaseAIConfig(context, promptText, options = {}) {
   const cleanPrompt = typeof promptText === 'string' ? promptText.trim() : '';
   const history = Array.isArray(options.history) ? options.history : [];
 
+  // Fill missing context attributes so both config evaluation and prompts have stable values.
   const safeContext = {
     kind: 'user',
     key: context?.key || 'user-standard-901',
@@ -231,6 +242,7 @@ async function evaluateReleaseAIConfig(context, promptText, options = {}) {
         source = 'launchdarkly-ai-config';
       }
     } catch (err) {
+      // Configuration evaluation failures should not prevent the local fallback from answering.
       console.warn('[AI Config] LaunchDarkly completionConfig fallback:', err.message);
     }
   }
@@ -248,11 +260,13 @@ async function evaluateReleaseAIConfig(context, promptText, options = {}) {
   const incidentActive = Boolean(options.incidentActive);
   const currentFlagState = Boolean(options.currentFlagState);
 
+  // Treat incidents and explicit risk/rollback language as recommendations to switch the flag off.
   const wantsRollback =
     incidentActive ||
     /\b(kill|off|disable|rollback|stop|latency|p99|revert|incident)\b/i.test(cleanPrompt);
 
   const proposedFlagValue = wantsRollback ? false : currentFlagState;
+  // Approval is needed only when this recommendation would actually change the current flag value.
   const requiresApproval = wantsRollback && currentFlagState !== proposedFlagValue;
 
   // Guard: do not invoke LM Studio if prompt is empty (e.g., dropdown change)
@@ -315,6 +329,7 @@ Keep responses concise (under 4 sentences) and directly answer the user's questi
     });
   }
 
+  // Attach configuration and inference details to the active OpenTelemetry span for diagnostics.
   if (activeSpan) {
     activeSpan.setAttribute('ld.ai_config.key', AI_CONFIG_KEY);
     activeSpan.setAttribute('ld.ai_config.source', source);
